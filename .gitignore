@@ -1,0 +1,31 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Environment secrets — never commit the real .env
+.env
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Pytest cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Alembic generated versions (optional — remove this line to track migrations)
+# alembic/versions/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
