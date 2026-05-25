@@ -5,13 +5,11 @@ Reminder timing rules
 * Travel-required events (inter-city): remind at T-24h and T-3h
 * Local events (same city / no travel): remind at T-30min
 
-All reminders are sent as WhatsApp messages to the executive's number via
-Twilio.  Each reminder is also recorded in the ``reminders`` DB table so the
-scheduler can survive restarts by reloading pending reminders on startup.
+Each reminder is recorded in the ``reminders`` DB table so the scheduler can
+survive restarts by reloading pending reminders on startup.
 """
 
 import logging
-import os
 from datetime import datetime, timedelta
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -48,12 +46,7 @@ def _reload_pending_reminders() -> None:
     reminders fired.
     """
     from app.db import get_db_session
-    from app.db.crud import get_pending_reminders, get_schedule_by_id
-
-    executive_number = os.getenv("EXECUTIVE_WHATSAPP", "")
-    if not executive_number:
-        logger.warning("EXECUTIVE_WHATSAPP not set — reminders will not be dispatched.")
-        return
+    from app.db.crud import get_pending_reminders
 
     db = get_db_session()
     try:
@@ -61,10 +54,9 @@ def _reload_pending_reminders() -> None:
         pending = get_pending_reminders(db, as_of=datetime(9999, 1, 1))
         for reminder in pending:
             if reminder.remind_at <= now:
-                # Already overdue — fire immediately
-                _fire_reminder(reminder.id, reminder.schedule_id, executive_number)
+                _fire_reminder(reminder.id, reminder.schedule_id)
             else:
-                _schedule_job(reminder.id, reminder.schedule_id, executive_number, reminder.remind_at)
+                _schedule_job(reminder.id, reminder.schedule_id, reminder.remind_at)
         logger.info("Reloaded %d pending reminder(s) from DB.", len(pending))
     finally:
         db.close()
@@ -85,11 +77,6 @@ def schedule_event_reminders(db, schedule, *, needs_travel: bool) -> None:
     """
     from app.db.crud import create_reminder
 
-    executive_number = os.getenv("EXECUTIVE_WHATSAPP", "")
-    if not executive_number:
-        logger.warning("EXECUTIVE_WHATSAPP not set — skipping reminder scheduling.")
-        return
-
     now = datetime.utcnow()
     fire_times: list[datetime] = []
 
@@ -108,7 +95,7 @@ def schedule_event_reminders(db, schedule, *, needs_travel: bool) -> None:
             )
             continue
         reminder = create_reminder(db, schedule.id, fire_at)
-        _schedule_job(reminder.id, schedule.id, executive_number, fire_at)
+        _schedule_job(reminder.id, schedule.id, fire_at)
         logger.info(
             "Scheduled reminder id=%d for schedule '%s' at %s.",
             reminder.id,
@@ -117,33 +104,27 @@ def schedule_event_reminders(db, schedule, *, needs_travel: bool) -> None:
         )
 
 
-def _schedule_job(
-    reminder_id: int, schedule_id: int, executive_number: str, fire_at: datetime
-) -> None:
+def _schedule_job(reminder_id: int, schedule_id: int, fire_at: datetime) -> None:
     """Register a single APScheduler date-trigger job."""
     job_id = f"reminder_{reminder_id}"
-    # Avoid duplicate jobs if called multiple times (e.g. on reload)
     if _scheduler.get_job(job_id):
         return
     _scheduler.add_job(
         _fire_reminder,
         trigger="date",
         run_date=fire_at,
-        args=[reminder_id, schedule_id, executive_number],
+        args=[reminder_id, schedule_id],
         id=job_id,
     )
 
 
-def _fire_reminder(
-    reminder_id: int, schedule_id: int, executive_number: str
-) -> None:
-    """Fetch the schedule, compose a message, send it, and mark as sent.
+def _fire_reminder(reminder_id: int, schedule_id: int) -> None:
+    """Fetch the schedule, log the reminder, and mark it as sent.
 
     This function is called by APScheduler in a background thread.
     """
     from app.db import get_db_session
     from app.db.crud import get_schedule_by_id, mark_reminder_sent
-    from app.integrations.whatsapp import send_whatsapp_message
 
     db = get_db_session()
     try:
@@ -153,17 +134,11 @@ def _fire_reminder(
             return
 
         message = _compose_reminder_message(schedule)
-        send_whatsapp_message(to=executive_number, body=message)
+        logger.info("REMINDER id=%d: %s", reminder_id, message)
         mark_reminder_sent(db, reminder_id)
-        logger.info(
-            "Sent reminder id=%d for schedule '%s' to %s.",
-            reminder_id,
-            schedule.title,
-            executive_number,
-        )
     except Exception as exc:
         logger.exception(
-            "Failed to send reminder id=%d for schedule %d: %s",
+            "Failed to fire reminder id=%d for schedule %d: %s",
             reminder_id,
             schedule_id,
             exc,
@@ -173,18 +148,7 @@ def _fire_reminder(
 
 
 def _compose_reminder_message(schedule) -> str:
-    """Build a human-readable reminder message for the executive.
-
-    Parameters
-    ----------
-    schedule:
-        ``Schedule`` ORM model.
-
-    Returns
-    -------
-    str
-        Formatted WhatsApp message.
-    """
+    """Build a human-readable reminder message for the executive."""
     minutes_until = (schedule.start_time - datetime.utcnow()).total_seconds() / 60
 
     if minutes_until >= 60:

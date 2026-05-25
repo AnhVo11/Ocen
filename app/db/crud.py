@@ -10,7 +10,7 @@ from typing import List, Optional
 from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
-from .models import Contact, Reminder, Schedule, WorkNote
+from .models import Reminder, Schedule, WorkNote
 
 
 # ---------------------------------------------------------------------------
@@ -91,46 +91,6 @@ def delete_schedule(db: Session, schedule_id: int) -> bool:
     db.delete(schedule)
     db.commit()
     return True
-
-
-# ---------------------------------------------------------------------------
-# Contact
-# ---------------------------------------------------------------------------
-
-
-def get_contact_by_whatsapp(db: Session, whatsapp_number: str) -> Optional[Contact]:
-    """Look up a contact by their WhatsApp number (e.g. 'whatsapp:+84...')."""
-    return (
-        db.query(Contact)
-        .filter(Contact.whatsapp_number == whatsapp_number)
-        .first()
-    )
-
-
-def create_contact(
-    db: Session,
-    *,
-    name: str,
-    role: str,
-    phone_number: Optional[str],
-    whatsapp_number: str,
-) -> Contact:
-    """Create and return a new contact record."""
-    contact = Contact(
-        name=name,
-        role=role,
-        phone_number=phone_number,
-        whatsapp_number=whatsapp_number,
-    )
-    db.add(contact)
-    db.commit()
-    db.refresh(contact)
-    return contact
-
-
-def get_all_contacts(db: Session) -> List[Contact]:
-    """Return all contacts."""
-    return db.query(Contact).all()
 
 
 # ---------------------------------------------------------------------------

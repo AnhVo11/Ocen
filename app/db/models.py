@@ -3,7 +3,6 @@
 Tables
 ------
 schedules   — calendar events
-contacts    — known WhatsApp users with their roles
 work_notes  — structured work-related notes attached to a schedule
 reminders   — reminder jobs with sent/pending status
 """
@@ -53,21 +52,6 @@ class Schedule(Base):
 
     def __repr__(self) -> str:
         return f"<Schedule id={self.id} title={self.title!r} start={self.start_time}>"
-
-
-class Contact(Base):
-    """A person who interacts with the bot via WhatsApp."""
-
-    __tablename__ = "contacts"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), nullable=False)
-    role = Column(String(50), nullable=False)          # executive | secretary | driver
-    phone_number = Column(String(20), nullable=True)
-    whatsapp_number = Column(String(30), nullable=False, unique=True, index=True)
-
-    def __repr__(self) -> str:
-        return f"<Contact id={self.id} name={self.name!r} role={self.role}>"
 
 
 class WorkNote(Base):

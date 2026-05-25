@@ -2,7 +2,6 @@
 
 Endpoints
 ---------
-POST /webhook/whatsapp       — Twilio WhatsApp webhook (form-encoded)
 GET  /health                 — Liveness check for Docker / load balancer
 GET  /schedules              — JSON list of all schedules (mobile app sync)
 POST /schedules              — Create a new schedule (from mobile app)
@@ -20,7 +19,7 @@ import os
 from datetime import datetime
 from typing import Optional
 
-from fastapi import FastAPI, Form, Response, HTTPException
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from dotenv import load_dotenv
@@ -120,44 +119,6 @@ async def on_shutdown() -> None:
     from app.scheduler.reminders import stop_scheduler
 
     stop_scheduler()
-
-
-# ---------------------------------------------------------------------------
-# WhatsApp webhook (Twilio)
-# ---------------------------------------------------------------------------
-
-
-@app.post("/webhook/whatsapp", response_class=Response)
-async def whatsapp_webhook(
-    From: str = Form(..., description="Sender WhatsApp number (Twilio format)"),
-    Body: str = Form(..., description="Message text"),
-) -> Response:
-    """Receive an inbound WhatsApp message from Twilio and reply with TwiML."""
-    logger.info("Inbound WhatsApp from %s: %r", From, Body[:80])
-
-    from app.bot.handler import handle_message
-
-    try:
-        reply = await handle_message(From, Body)
-    except Exception:
-        logger.exception("Uncaught error in handle_message")
-        reply = "❌ Lỗi hệ thống. Vui lòng thử lại sau."
-
-    # Escape XML special characters in the reply body
-    safe_reply = (
-        reply
-        .replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
-
-    twiml = (
-        '<?xml version="1.0" encoding="UTF-8"?>'
-        "<Response>"
-        f"<Message>{safe_reply}</Message>"
-        "</Response>"
-    )
-    return Response(content=twiml, media_type="text/xml")
 
 
 # ---------------------------------------------------------------------------

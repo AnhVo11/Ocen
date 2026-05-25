@@ -1,1 +1,1 @@
-"""Third-party API integrations: Twilio WhatsApp, Google Maps, Amadeus."""
+"""Third-party API integrations: Google Maps, Amadeus."""
