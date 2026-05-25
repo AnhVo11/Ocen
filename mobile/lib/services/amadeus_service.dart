@@ -171,6 +171,9 @@ class AmadeusService {
 
   /// Search for one-way flights.
   ///
+  /// Tries the OCEN backend first (scraped Vietnam domestic schedule).
+  /// Falls back to mock data if the backend is unreachable or returns nothing.
+  ///
   /// [origin] and [destination] can be IATA codes or location strings
   /// (will be resolved via [cityToIata]).
   Future<List<FlightOffer>> searchFlights({
@@ -185,92 +188,91 @@ class AmadeusService {
     final dateStr =
         '${departureDate.year}-${departureDate.month.toString().padLeft(2, '0')}-${departureDate.day.toString().padLeft(2, '0')}';
 
-    // Return mock data if Amadeus is not configured
-    if (!AppConfig.flightSearchEnabled) {
-      return _mockFlights(originCode, destCode, departureDate);
-    }
+    // ── Try OCEN backend first (scraped real schedule) ──────────────────────
+    if (AppConfig.backendEnabled) {
+      try {
+        final uri = Uri.parse('${AppConfig.backendUrl}/flights').replace(
+          queryParameters: {
+            'from': originCode,
+            'to': destCode,
+            'date': dateStr,
+          },
+        );
+        final response = await http
+            .get(uri)
+            .timeout(AppConfig.backendTimeout);
 
-    final ok = await _ensureToken();
-    if (!ok) return _mockFlights(originCode, destCode, departureDate);
-
-    try {
-      final uri = Uri.parse(
-              '${AppConfig.amadeusBaseUrl}/v2/shopping/flight-offers')
-          .replace(queryParameters: {
-        'originLocationCode': originCode,
-        'destinationLocationCode': destCode,
-        'departureDate': dateStr,
-        'adults': adults.toString(),
-        'max': maxResults.toString(),
-        'currencyCode': 'VND',
-        'nonStop': 'false',
-      });
-
-      final response = await http.get(
-        uri,
-        headers: {'Authorization': 'Bearer $_accessToken'},
-      );
-
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return _parseOffers(data);
+        if (response.statusCode == 200) {
+          final List<dynamic> data = json.decode(response.body) as List;
+          if (data.isNotEmpty) {
+            final offers = _parseBackendFlights(data, departureDate);
+            if (offers.isNotEmpty) return offers;
+          }
+        }
+      } catch (e) {
+        debugPrint('Backend flight search unavailable: $e');
       }
-      debugPrint(
-          'Amadeus search error: ${response.statusCode} ${response.body}');
-      return _mockFlights(originCode, destCode, departureDate);
-    } catch (e) {
-      debugPrint('Amadeus search exception: $e');
-      return _mockFlights(originCode, destCode, departureDate);
     }
+
+    // ── Fallback: mock data ─────────────────────────────────────────────────
+    return _mockFlights(originCode, destCode, departureDate);
   }
 
-  // ── Response parser ───────────────────────────────────────────────────────
+  // ── Backend response parser ───────────────────────────────────────────────
 
-  List<FlightOffer> _parseOffers(Map<String, dynamic> data) {
-    final List offers = data['data'] ?? [];
+  /// Parses the OCEN backend `/flights` response into [FlightOffer] objects.
+  ///
+  /// Each item has: airline, flight_number, from_iata, to_iata,
+  /// dep_time ("HH:MM"), arr_time ("HH:MM"), date ("YYYY-MM-DD").
+  List<FlightOffer> _parseBackendFlights(
+      List<dynamic> data, DateTime baseDate) {
     final List<FlightOffer> result = [];
+    final base = DateTime(baseDate.year, baseDate.month, baseDate.day);
 
-    for (final offer in offers) {
+    for (final item in data) {
       try {
-        final itinerary = offer['itineraries'][0];
-        final segments = (itinerary['segments'] as List).map((seg) {
-          return FlightSegment(
-            departureCode: seg['departure']['iataCode'],
-            arrivalCode: seg['arrival']['iataCode'],
-            departureTime: DateTime.parse(seg['departure']['at']),
-            arrivalTime: DateTime.parse(seg['arrival']['at']),
-            carrierCode: seg['carrierCode'],
-            flightNumber: seg['number'],
-            duration: seg['duration'],
-          );
-        }).toList();
+        final depParts = (item['dep_time'] as String).split(':');
+        final arrParts = (item['arr_time'] as String).split(':');
+        final dep = base.add(Duration(
+          hours: int.parse(depParts[0]),
+          minutes: int.parse(depParts[1]),
+        ));
+        final arr = base.add(Duration(
+          hours: int.parse(arrParts[0]),
+          minutes: int.parse(arrParts[1]),
+        ));
+        // Handle overnight flights (arr < dep means it lands next day)
+        final arrAdjusted = arr.isBefore(dep) ? arr.add(const Duration(days: 1)) : arr;
 
-        final currency =
-            offer['price']['currency'] as String? ?? 'VND';
-        final rawPrice = offer['price']['grandTotal'] as String? ?? '0';
-        final priceNum = double.tryParse(rawPrice) ?? 0;
-        final priceStr = currency == 'VND'
-            ? '${_formatNumber(priceNum.toInt())} VND'
-            : '${rawPrice} $currency';
-
-        final airline = airlineName(segments.first.carrierCode);
+        final durMin = arrAdjusted.difference(dep).inMinutes;
+        final durStr =
+            'PT${durMin ~/ 60}H${durMin % 60 == 0 ? '' : '${durMin % 60}M'}';
 
         result.add(FlightOffer(
-          segments: segments,
-          price: priceStr,
-          currency: currency,
-          totalDuration: itinerary['duration'] ?? '',
-          airline: airline,
+          segments: [
+            FlightSegment(
+              departureCode: item['from_iata'] as String,
+              arrivalCode: item['to_iata'] as String,
+              departureTime: dep,
+              arrivalTime: arrAdjusted,
+              carrierCode: (item['flight_number'] as String).substring(0, 2),
+              flightNumber: item['flight_number'] as String,
+              duration: durStr,
+            ),
+          ],
+          price: '',          // not available in scraped data
+          currency: 'VND',
+          totalDuration: durStr,
+          airline: item['airline'] as String,
         ));
       } catch (e) {
-        debugPrint('Parse error for offer: $e');
+        debugPrint('Backend flight parse error: $e');
       }
     }
-
     return result;
   }
 
-  // ── Mock data (used when API key not set) ─────────────────────────────────
+  // ── Mock data (used when backend is unreachable or returns empty) ────────
 
   List<FlightOffer> _mockFlights(
       String origin, String destination, DateTime date) {

@@ -15,6 +15,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -85,3 +86,36 @@ class Reminder(Base):
 
     def __repr__(self) -> str:
         return f"<Reminder id={self.id} remind_at={self.remind_at} sent={self.sent}>"
+
+
+class Flight(Base):
+    """A domestic Vietnam flight from the scraped schedule dataset.
+
+    Populated on startup from FlightSchedule/data/vietnam_flights_2026.csv
+    (or daily JSON files if the CSV hasn't been built yet).
+    Treated as read-only — not modified by the REST API.
+    """
+
+    __tablename__ = "flights"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    date = Column(String(10), nullable=False)          # "YYYY-MM-DD"
+    airline = Column(String(100), nullable=False)      # "Vietnam Airlines"
+    flight_number = Column(String(20), nullable=False) # "VN123"
+    from_iata = Column(String(4), nullable=False)      # "HAN"
+    to_iata = Column(String(4), nullable=False)        # "SGN"
+    from_name = Column(String(200), nullable=True)
+    to_name = Column(String(200), nullable=True)
+    dep_time = Column(String(5), nullable=False)       # "HH:MM"
+    arr_time = Column(String(5), nullable=False)       # "HH:MM"
+    status = Column(String(20), nullable=False, default="scheduled")
+
+    __table_args__ = (
+        Index("ix_flights_route_date", "date", "from_iata", "to_iata"),
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<Flight {self.flight_number} {self.from_iata}→{self.to_iata}"
+            f" {self.date} {self.dep_time}>"
+        )
