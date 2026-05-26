@@ -8,7 +8,6 @@ import '../../theme.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/schedule_card.dart';
 import '../../widgets/travel_gap_card.dart';
-import '../../widgets/voice_input_sheet.dart';
 
 /// Read-only schedule view for the executive.
 /// Shows today's events in Tab 1 and upcoming week in Tab 2.
@@ -34,18 +33,6 @@ class _ExecutiveHomeScreenState extends State<ExecutiveHomeScreen>
   void dispose() {
     _tabs.dispose();
     super.dispose();
-  }
-
-  void _openVoiceInput() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => VoiceInputSheet(
-        apiService: _api,
-        onScheduleAdded: () => setState(() {}), // refresh lists
-      ),
-    );
   }
 
   @override
@@ -77,13 +64,6 @@ class _ExecutiveHomeScreenState extends State<ExecutiveHomeScreen>
         ),
       ),
       drawer: const AppDrawer(role: UserRole.executive),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _openVoiceInput,
-        icon: const Icon(Icons.mic),
-        label: const Text('Thêm bằng giọng nói'),
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-      ),
       body: TabBarView(
         controller: _tabs,
         children: [
