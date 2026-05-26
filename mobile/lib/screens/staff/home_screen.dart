@@ -6,6 +6,7 @@ import '../../services/api_service.dart';
 import '../../theme.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/schedule_card.dart';
+import '../../widgets/voice_input_sheet.dart';
 
 /// Home screen for secretary / driver — shows all upcoming schedules
 /// and exposes the "Add schedule" FAB.
@@ -22,6 +23,18 @@ class _StaffHomeScreenState extends State<StaffHomeScreen> {
   Future<void> _goToAddSchedule() async {
     final added = await Navigator.pushNamed(context, '/add-schedule');
     if (added == true) setState(() {}); // refresh list
+  }
+
+  void _openVoiceInput() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => VoiceInputSheet(
+        apiService: _api,
+        onScheduleAdded: () => setState(() {}),
+      ),
+    );
   }
 
   @override
@@ -67,13 +80,29 @@ class _StaffHomeScreenState extends State<StaffHomeScreen> {
               },
             ),
 
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _goToAddSchedule,
-        icon: const Icon(Icons.add),
-        label: const Text(
-          'Thêm lịch mới', // Add new schedule
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'staff_voice',
+            onPressed: _openVoiceInput,
+            icon: const Icon(Icons.mic),
+            label: const Text('Thêm bằng giọng nói'),
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            heroTag: 'staff_form',
+            onPressed: _goToAddSchedule,
+            icon: const Icon(Icons.add),
+            label: const Text('Thêm lịch mới',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+          ),
+        ],
       ),
     );
   }

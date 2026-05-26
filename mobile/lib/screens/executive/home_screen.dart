@@ -8,8 +8,9 @@ import '../../theme.dart';
 import '../../widgets/app_drawer.dart';
 import '../../widgets/schedule_card.dart';
 import '../../widgets/travel_gap_card.dart';
+import '../../widgets/voice_input_sheet.dart';
 
-/// Read-only schedule view for the executive.
+/// Schedule view for the executive.
 /// Shows today's events in Tab 1 and upcoming week in Tab 2.
 class ExecutiveHomeScreen extends StatefulWidget {
   const ExecutiveHomeScreen({super.key});
@@ -33,6 +34,23 @@ class _ExecutiveHomeScreenState extends State<ExecutiveHomeScreen>
   void dispose() {
     _tabs.dispose();
     super.dispose();
+  }
+
+  void _openVoiceInput() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => VoiceInputSheet(
+        apiService: _api,
+        onScheduleAdded: () => setState(() {}),
+      ),
+    );
+  }
+
+  Future<void> _goToAddSchedule() async {
+    final added = await Navigator.pushNamed(context, '/add-schedule');
+    if (added == true) setState(() {});
   }
 
   @override
@@ -64,6 +82,30 @@ class _ExecutiveHomeScreenState extends State<ExecutiveHomeScreen>
         ),
       ),
       drawer: const AppDrawer(role: UserRole.executive),
+      floatingActionButton: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'exec_voice',
+            onPressed: _openVoiceInput,
+            icon: const Icon(Icons.mic),
+            label: const Text('Thêm bằng giọng nói'),
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+          ),
+          const SizedBox(height: 12),
+          FloatingActionButton.extended(
+            heroTag: 'exec_form',
+            onPressed: _goToAddSchedule,
+            icon: const Icon(Icons.add),
+            label: const Text('Thêm lịch mới',
+                style: TextStyle(fontWeight: FontWeight.bold)),
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+          ),
+        ],
+      ),
       body: TabBarView(
         controller: _tabs,
         children: [
