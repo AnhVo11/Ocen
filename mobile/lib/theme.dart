@@ -26,6 +26,11 @@ class AppColors {
   static const Color timelineLine   = Color(0xFFE0E0E0);
   static const Color checkboxActive = Color(0xFF1A1A1A);
 
+  // ── Semantic / status colors (muted for B&W palette) ─────────────────────
+  static const Color error          = Color(0xFFC62828); // Deep red
+  static const Color warning        = Color(0xFFBF360C); // Deep orange-red
+  static const Color success        = Color(0xFF2E7D32); // Deep green
+
   // ── Convenience aliases ───────────────────────────────────────────────────
   static const Color primary        = Color(0xFF1A1A1A);
   static const Color accent         = Color(0xFF1A1A1A);

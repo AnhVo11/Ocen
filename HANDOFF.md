@@ -1,17 +1,18 @@
 # OCEN App — Project Handoff Brief
-_Last updated: 24 May 2026. Paste this entire file into a new chat to resume work._
+_Last updated: 26 May 2026. Paste this entire file into a new chat to resume work._
 
 ---
 
 ## What Is OCEN?
 
-A Flutter mobile app (Android) that acts as an AI scheduling assistant for Anh's father, who is a corporate executive. It has two roles:
-- **Executive (read-only):** views his schedule, gets travel alerts, sees flight options
-- **Secretary/Driver (full access):** adds/edits schedule entries via voice or form
+A Flutter mobile app (Android) that acts as an AI scheduling assistant for Anh's father, who is a corporate executive. Three roles:
+- **Giám Đốc / Executive:** views schedule, gets travel alerts, sees flight options
+- **Thư Ký / Secretary:** adds/edits schedule entries via voice or form
+- **Tài Xế / Driver:** views travel schedule
 
-The project lives at `C:\Users\anhvo\Desktop\Ocen\`. Key subdirectories:
-- `mobile/` — Flutter app (the main focus)
-- `app/` — Python bot/backend (Telegram bot + SQLite, mostly scaffolded)
+**IMPORTANT: This is a standalone app. No WhatsApp, no Twilio, no Telegram. Do not add any messaging integrations.**
+
+Project root: `C:\Users\anhvo\Desktop\Ocen\`
 
 ---
 
@@ -26,71 +27,185 @@ The project lives at `C:\Users\anhvo\Desktop\Ocen\`. Key subdirectories:
 | TTS | `flutter_tts ^4.0.0` |
 | HTTP | `http ^1.2.0` |
 | Localisation | `intl ^0.20.2` + `flutter_localizations` |
-| Maps | Google Maps Directions API (key already in config) |
-| Flight data | Amadeus API (mock fallback when keys not set) |
-| Backend | Python + Flask + SQLite + Alembic (in `app/`) |
+| Maps | Google Maps Directions API (key in app_config.dart) |
+| Flight data | **Local scraped data** (AviationStack scraper, NOT Amadeus) |
+| Backend | Python + FastAPI + SQLAlchemy + SQLite + APScheduler |
 
 **Android build config:** `mobile/android/app/build.gradle.kts`
 **Run script:** Double-click `C:\Users\anhvo\Desktop\Ocen\restart_flutter.vbs` to kill old dart/flutter processes and launch fresh `flutter run`.
 
 ---
 
-## API Keys Already Configured
+## API Keys
 
 File: `mobile/lib/config/app_config.dart`
 
 ```dart
 static const String googleMapsApiKey = 'AIzaSyCrHfSuWEKqOH1KUT1Izz3O0rjIIAIdM_Y';
-static const String amadeusApiKey = '';       // empty = uses mock data
-static const String amadeusApiSecret = '';    // empty = uses mock data
-static const String amadeusBaseUrl = 'https://test.api.amadeus.com';
+static const String backendUrl       = 'http://10.0.2.2:8000';  // emulator → host localhost
+static const Duration backendTimeout = Duration(seconds: 5);
 ```
 
-- **Google Maps Directions API** key is live. The Directions API needs to be enabled in Google Cloud Console (Library → Directions API → Enable) if not done yet.
-- **Amadeus** developer portal is being decommissioned 17 July 2026. Mock flight data is used instead and is good enough for personal use.
+- **Google Maps Directions API** key is live. Enable Directions API in Google Cloud Console if not done yet.
+- **Amadeus is NOT used** — replaced with local flight data. Amadeus is being decommissioned July 2026 anyway.
+- **AviationStack key** (for scraping): `79a21b1d287b568c59b733d2f8dcaf9f` — used only when running the scraper manually.
 
 ---
 
-## All Files Created / Modified
+## Design System (B&W, implemented May 26 2026)
 
-### New files added
-| File | Purpose |
-|---|---|
-| `mobile/lib/services/amadeus_service.dart` | Flight search service: OAuth2 token, Amadeus API call, mock fallback, city→IATA mapping for Vietnamese cities |
-| `mobile/lib/widgets/flight_search_sheet.dart` | DraggableScrollableSheet showing flights for a schedule entry. Groups into "✅ Kịp giờ họp" vs "⚠️ Có thể trễ giờ họp" |
-| `restart_flutter.vbs` | Kills dart.exe/flutter.exe then runs `flutter run` fresh (workaround for terminal tier restriction) |
+All UI now follows a minimal black & white design. No gradients, no bright colours.
 
-### Modified files
-| File | Change |
-|---|---|
-| `mobile/lib/config/app_config.dart` | Added Google Maps + Amadeus keys/config |
-| `mobile/lib/widgets/schedule_card.dart` | Added `_openFlightSearch()` + "Xem chuyến bay" OutlinedButton (shown only when `needsTravel && travelMode == 'flight'`) |
-| `mobile/lib/widgets/voice_input_sheet.dart` | Fixed bug: `await widget.apiService.checkAndSave(...)` wasn't capturing return value; added `final result =` |
-| `mobile/lib/services/notification_service.dart` | Fixed compile error: added required `uiLocalNotificationDateInterpretation: UILocalNotificationDateInterpretation.absoluteTime` to `_plugin.zonedSchedule()` call |
-| `mobile/lib/widgets/flight_search_sheet.dart` | Removed `vi_VN` locale from `DateFormat` (potential runtime crash) |
-| `mobile/android/app/build.gradle.kts` | Added `isCoreLibraryDesugaringEnabled = true` to `compileOptions` + `dependencies { coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4") }` — required by flutter_local_notifications |
+```dart
+// mobile/lib/theme.dart — AppColors
+background     = Color(0xFFF4F4F6)   // Page background (very light grey)
+cardDark       = Color(0xFF1A1A1A)   // Featured dark card / active pill
+cardLight      = Color(0xFFFFFFFF)   // Default white card
+cardSecondary  = Color(0xFFEFEFEF)   // Soft grey (icon backgrounds)
+textPrimary    = Color(0xFF1A1A1A)
+textSecondary  = Color(0xFF8A8A8A)
+timelineLine   = Color(0xFFE0E0E0)
+pillActive     = Color(0xFF1A1A1A)   // Week strip selected day
+error          = Color(0xFFC62828)   // Deep red (conflict dialogs)
+warning        = Color(0xFFBF360C)   // Deep orange-red (urgent events)
+success        = Color(0xFF2E7D32)   // Deep green (travel check OK)
+```
 
----
-
-## Bugs Fixed (In Order)
-
-1. **`voice_input_sheet.dart`** — `result` undefined: `checkAndSave()` return value not captured → fixed with `final result = await`
-2. **`amadeus_service.dart`** — Dart numeric separator syntax (`1_850_000`) requires Dart 3.6+; replaced with plain numbers (`1850000`)
-3. **`notification_service.dart`** — Missing required parameter `uiLocalNotificationDateInterpretation` in `zonedSchedule()` call — THIS was the root cause blocking ALL builds for hours
-4. **`flight_search_sheet.dart`** — `DateFormat('EEEE, dd/MM/yyyy', 'vi_VN')` may throw if locale not initialised; simplified to `DateFormat('dd/MM/yyyy')`
-5. **`android/app/build.gradle.kts`** — Gradle error: `flutter_local_notifications` requires core library desugaring; added `isCoreLibraryDesugaringEnabled = true` + desugaring dependency
+Card radius: 24px. Pill radius: 50px. Checkbox radius: 6px.
+Card shadow: `0px 8px 24px rgba(0,0,0,0.08)`.
 
 ---
 
-## Current App State (What's Working)
+## Backend (FastAPI — `app/`)
 
-- App runs on Pixel 6 API 34 emulator
-- **Executive home screen** shows today/tomorrow schedule tabs
-- **Schedule cards** show time, title, location, travel badges (✈️ Cần bay / 🚗 Di chuyển / X phút)
-- **"Xem chuyến bay" button** appears on flight-required cards → opens bottom sheet with 6 mock flights (Vietnam Airlines, VietJet, Bamboo) grouped by whether they arrive before the meeting
-- **Voice input** button ("Thêm bằng giọng nói") works for adding schedules
-- **Local notifications** scheduled 30 min before events + travel departure alerts
-- **Travel time warning banner** on home screen (red banner when departure is overdue)
+### Running the backend
+```
+cd C:\Users\anhvo\Desktop\Ocen
+start_backend.bat        # or: python -m uvicorn app.main:app --reload --port 8000
+```
+
+### Key endpoints
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/schedules` | List all schedules |
+| POST | `/schedules` | Create schedule |
+| PUT | `/schedules/{id}` | Update schedule |
+| DELETE | `/schedules/{id}` | Delete schedule |
+| GET | `/flights` | Query flights: `?from_iata=SGN&to_iata=HAN&date=2026-05-26` |
+| GET | `/flights/routes` | List all available routes |
+
+### Flight data loading
+On startup, `app/main.py` calls `_load_flights_if_empty()` which:
+1. Tries to bulk-load `FlightSchedule/data/vietnam_flights_2026.csv` (full year CSV, doesn't exist yet)
+2. Falls back to loading daily JSON files from `FlightSchedule/data/YYYY-MM-DD.json`
+
+The Flutter app queries the backend first; if unreachable or empty it falls back to mock flights.
+
+---
+
+## Flight Data (AviationStack Scraper — `FlightSchedule/`)
+
+### What's been scraped
+- **2026-05-26.json** — 925 flights (VN: 496, VJ: 322, VASCO: 46, Bamboo: 36, Vietravel: 25)
+- 6 Vietnamese airlines: VN (Vietnam Airlines), VJ (VietJet), QH (Bamboo), VU (Vietravel), BL (Pacific Airlines), 0V (VASCO)
+- 21 domestic airports covered
+
+### How to scrape more dates
+```bash
+cd C:\Users\anhvo\Desktop\Ocen\FlightSchedule
+python fetch_schedule.py --key 79a21b1d287b568c59b733d2f8dcaf9f
+# Scrapes today by default. Saves to data/YYYY-MM-DD.json
+```
+
+### Strategy (agreed with Anh)
+- Run `fetch_schedule.py` daily for **7–14 more days** to build up a data bank
+- After 7+ days of data: run `python build_year.py` to generate `data/vietnam_flights_2026.csv`
+- Re-scrape a specific date ONLY if dad reports incorrect flight info
+
+---
+
+## Current App State (What's Working — as of 26 May 2026)
+
+- ✅ **New B&W UI** is live and running on Pixel 6 API 34 emulator
+- ✅ **Role select screen** — OCEN brand, 3 role cards (Giám Đốc, Thư Ký, Tài Xế)
+- ✅ **Executive home screen** — date header, week strip, timeline cards, floating bottom nav
+- ✅ **Staff home screen** — same layout, refresh icon instead of menu
+- ✅ **All 3 roles** have both voice and form add-schedule buttons (via bottom nav)
+- ✅ **Schedule cards** — timeline dot, featured dark card for first work event, pills, "Xem chuyến bay" button
+- ✅ **Week strip** — 7-day selector, active day = black pill, today gets a dot
+- ✅ **Voice input** via `VoiceInputSheet`
+- ✅ **Flight search sheet** — queries backend `/flights`, falls back to mock
+- ✅ **Local notifications** — 30 min before events, T-24h/T-3h departure alerts
+- ✅ **Backend** — FastAPI + SQLite, loads local flight JSON on startup
+- ✅ **Flutter → Backend** connection configured (http://10.0.2.2:8000)
+
+---
+
+## What's NOT Done Yet
+
+### Medium priority
+- [ ] **Backend ↔ Flutter sync for schedules** — Flutter app currently stores schedules in local SQLite (`sqflite`), not the backend. The backend's `/schedules` endpoints exist but Flutter isn't calling them yet. Need to update `ApiService` to POST/GET from backend instead of local DB.
+- [ ] **Scrape more flight data** — Only 1 day scraped (2026-05-26). Run `fetch_schedule.py` daily. Need 7+ days before running `build_year.py`.
+- [ ] **Enable Google Directions API** in Google Cloud Console if not already done (needed for car travel-time estimates).
+
+### Low priority / nice to have
+- [ ] **Delete** `FlightSchedule/data/vn_raw_schedule.json` (test file, not git-tracked, safe to delete)
+- [ ] **Update README.md** — still says "WhatsApp Smart Scheduling"
+- [ ] **iOS build** (needs Mac)
+- [ ] **Push notifications** from backend when secretary adds a schedule
+- [ ] **Edit/delete schedule** from executive view
+- [ ] **All schedules list** screen (beyond current day view)
+
+---
+
+## File Tree (Key Parts)
+
+```
+Ocen/
+├── mobile/
+│   ├── lib/
+│   │   ├── main.dart                        ← Routes: / → RoleSelect, /executive, /staff, /add-schedule
+│   │   ├── theme.dart                       ← B&W design system (AppColors + AppTheme)
+│   │   ├── config/
+│   │   │   └── app_config.dart              ← API keys, backendUrl
+│   │   ├── models/
+│   │   │   ├── schedule.dart
+│   │   │   └── user_role.dart
+│   │   ├── services/
+│   │   │   ├── api_service.dart             ← Local SQLite CRUD + AI travel check
+│   │   │   ├── amadeus_service.dart         ← Now queries backend /flights, mock fallback
+│   │   │   ├── notification_service.dart
+│   │   │   └── maps_service.dart            ← Google Maps directions
+│   │   ├── screens/
+│   │   │   ├── role_select_screen.dart      ← Landing screen (B&W redesign)
+│   │   │   ├── executive/home_screen.dart   ← B&W timeline layout
+│   │   │   ├── staff/home_screen.dart       ← B&W timeline layout
+│   │   │   ├── staff/add_schedule_screen.dart
+│   │   │   └── shared/
+│   │   │       ├── conflict_dialog.dart
+│   │   │       └── travel_check_screen.dart
+│   │   └── widgets/
+│   │       ├── schedule_card.dart           ← Timeline card (B&W redesign)
+│   │       ├── week_strip.dart              ← 7-day date selector (new)
+│   │       ├── flight_search_sheet.dart     ← Flight list bottom sheet
+│   │       ├── voice_input_sheet.dart       ← Voice entry
+│   │       ├── travel_gap_card.dart
+│   │       └── app_drawer.dart
+│   ├── android/app/build.gradle.kts         ← Desugaring enabled
+│   └── pubspec.yaml
+├── app/                                     ← Python FastAPI backend
+│   ├── main.py                              ← Routes + flight loader
+│   └── db/
+│       └── models.py                        ← Schedule + Flight SQLAlchemy models
+├── FlightSchedule/
+│   ├── fetch_schedule.py                    ← AviationStack daily scraper
+│   ├── build_year.py                        ← Merge daily JSONs → CSV (run after 7+ days)
+│   └── data/
+│       └── 2026-05-26.json                  ← 925 flights scraped
+├── restart_flutter.vbs                      ← Double-click to rebuild app
+├── start_backend.bat                        ← Start the Python backend
+└── HANDOFF.md                               ← This file
+```
 
 ---
 
@@ -111,74 +226,29 @@ class Schedule {
 }
 ```
 
----
+## Data Model: `Flight` (SQLAlchemy, backend)
 
-## What's Left To Do (Prioritised)
-
-### High value / easy
-- [ ] **Verify build succeeded** after latest Gradle fix — run `restart_flutter.vbs` and check terminal says "Flutter run key commands." with no errors
-- [ ] **Enable Directions API** in Google Cloud Console if not done yet (for real driving-time estimates on car-travel cards)
-
-### Medium value
-- [ ] **Backend sync** — the Python bot (`app/`) is scaffolded but not connected to the mobile app. Wiring it up would let the secretary add schedules via Telegram and have them appear on the executive's phone
-- [ ] **Real flight data** — Amadeus shutting down July 2026; alternative: Kiwi.com Tequila API or RapidAPI flight provider. Mock data works fine for now.
-
-### Nice to have
-- [ ] iOS build (needs Mac)
-- [ ] Push notifications from backend when secretary adds a schedule
-- [ ] "Tất cả lịch" (all schedules) list screen beyond just today/tomorrow tabs
-- [ ] Edit/delete schedule from executive view
-
----
-
-## How To Run The App
-
-1. Make sure the Android emulator (Pixel 6 API 34) is running in Android Studio
-2. Double-click `C:\Users\anhvo\Desktop\Ocen\restart_flutter.vbs`
-3. A Command Prompt window opens — wait for "Flutter run key commands." (about 1-2 min first run, faster after)
-4. App appears on emulator; press **R** in the terminal to hot-reload after code changes
-
----
-
-## Project File Tree (Key Parts)
-
-```
-Ocen/
-├── mobile/
-│   ├── lib/
-│   │   ├── main.dart
-│   │   ├── theme.dart
-│   │   ├── config/
-│   │   │   └── app_config.dart          ← API keys here
-│   │   ├── models/
-│   │   │   └── schedule.dart
-│   │   ├── services/
-│   │   │   ├── api_service.dart         ← SQLite CRUD + AI travel check
-│   │   │   ├── amadeus_service.dart     ← Flight search (new)
-│   │   │   ├── notification_service.dart
-│   │   │   └── maps_service.dart        ← Google Maps directions
-│   │   ├── screens/
-│   │   │   ├── executive/home_screen.dart
-│   │   │   ├── staff/home_screen.dart
-│   │   │   ├── staff/add_schedule_screen.dart
-│   │   │   └── role_select_screen.dart
-│   │   └── widgets/
-│   │       ├── schedule_card.dart       ← Shows flight button (modified)
-│   │       ├── flight_search_sheet.dart ← Flight list bottom sheet (new)
-│   │       ├── voice_input_sheet.dart   ← Voice entry (fixed)
-│   │       └── travel_warning_banner.dart
-│   ├── android/app/build.gradle.kts    ← Desugaring fix applied
-│   └── pubspec.yaml
-├── app/                                 ← Python backend (Telegram bot)
-├── restart_flutter.vbs                  ← Run this to rebuild
-└── HANDOFF.md                           ← This file
+```python
+class Flight(Base):
+    date          # "2026-05-26"
+    airline       # "Vietnam Airlines"
+    flight_number # "VN123"
+    from_iata     # "SGN"
+    to_iata       # "HAN"
+    from_name     # "Tan Son Nhat"
+    to_name       # "Noi Bai"
+    dep_time      # "06:30"
+    arr_time      # "08:30"
+    status        # "scheduled"
 ```
 
 ---
 
 ## Notes For Next Session
 
-- The terminal (Command Prompt) launched by the VBS script is at click-tier in Cowork, meaning Claude can see it but can't type into it. To check build errors, ask the user to paste terminal output.
-- VS Code is also at click-tier. The Android emulator is embedded in VS Code's "Running Devices" panel — pop it out with the arrow icon on the "Pixel 6 API 34" tab to interact with it.
-- The `restart_flutter.vbs` is the reliable way to rebuild. Don't try to use VS Code's run button.
-- User's email: anhvo8438@gmail.com
+- **Terminal is click-tier** in Cowork — Claude can see it but can't type. To check build errors, look at the CMD window in the taskbar (multiple may be open from previous runs; the most recent is the rightmost one). Or ask user to paste output.
+- **VS Code is also click-tier.** Use `restart_flutter.vbs` to rebuild, not VS Code's run button.
+- **Multiple CMD windows** will be open from previous builds. The active flutter run is identifiable by its process ID in the log output and "Flutter run key commands." appearing without a subsequent error.
+- The Android emulator shows up in Android Studio's "Running Devices - Ocen" floating window. If the emulator isn't visible, open Android Studio.
+- **Git:** all UI changes are committed and pushed to main branch as of 26 May 2026.
+- User email: anhvo8438@gmail.com
