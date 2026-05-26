@@ -5,12 +5,26 @@ import '../models/schedule.dart';
 import '../theme.dart';
 import 'flight_search_sheet.dart';
 
-/// A polished card that displays a single schedule entry.
+/// A timeline-style schedule card.
+///
+/// [isFirst] and [isLast] control whether the connecting vertical line
+/// extends above / below the timeline dot.
+/// [isFeatured] renders the dark card variant.
 class ScheduleCard extends StatelessWidget {
   final Schedule schedule;
   final VoidCallback? onTap;
+  final bool isFirst;
+  final bool isLast;
+  final bool isFeatured; // dark card style
 
-  const ScheduleCard({super.key, required this.schedule, this.onTap});
+  const ScheduleCard({
+    super.key,
+    required this.schedule,
+    this.onTap,
+    this.isFirst = false,
+    this.isLast = false,
+    this.isFeatured = false,
+  });
 
   void _openFlightSearch(BuildContext context) {
     showModalBottomSheet(
@@ -21,118 +35,178 @@ class ScheduleCard extends StatelessWidget {
     );
   }
 
-  Color get _accentColor =>
-      schedule.isWork ? AppColors.primary : AppColors.accent;
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Timeline column ──────────────────────────────────────────────
+          SizedBox(
+            width: 24,
+            child: Column(
+              children: [
+                // Line above dot
+                Container(
+                  width: 2,
+                  height: isFirst ? 16 : 24,
+                  color: isFirst
+                      ? Colors.transparent
+                      : AppColors.timelineLine,
+                ),
+                // Dot
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isFeatured
+                        ? AppColors.cardDark
+                        : Colors.transparent,
+                    border: Border.all(
+                      color: isFeatured
+                          ? AppColors.cardDark
+                          : AppColors.timelineLine,
+                      width: 2,
+                    ),
+                  ),
+                ),
+                // Line below dot
+                Container(
+                  width: 2,
+                  height: isLast ? 16 : double.infinity,
+                  color: isLast
+                      ? Colors.transparent
+                      : AppColors.timelineLine,
+                  constraints: const BoxConstraints(minHeight: 16),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(width: 12),
+
+          // ── Card ─────────────────────────────────────────────────────────
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: _CardBody(
+                schedule: schedule,
+                isFeatured: isFeatured,
+                onTap: onTap,
+                onFlightSearch: () => _openFlightSearch(context),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CardBody extends StatelessWidget {
+  final Schedule schedule;
+  final bool isFeatured;
+  final VoidCallback? onTap;
+  final VoidCallback onFlightSearch;
+
+  const _CardBody({
+    required this.schedule,
+    required this.isFeatured,
+    required this.onTap,
+    required this.onFlightSearch,
+  });
 
   @override
   Widget build(BuildContext context) {
     final timeFmt = DateFormat('HH:mm');
+    final bg = isFeatured ? AppColors.cardDark : AppColors.cardLight;
+    final titleColor = isFeatured ? Colors.white : AppColors.textPrimary;
+    final subColor = isFeatured ? Colors.white54 : AppColors.textSecondary;
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
       decoration: BoxDecoration(
-        color: AppColors.cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withAlpha(13),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
+        color: bg,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: isFeatured
+            ? []
+            : [
+                BoxShadow(
+                  color: Colors.black.withAlpha(20),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+              ],
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(24),
         child: InkWell(
           onTap: onTap,
-          borderRadius: BorderRadius.circular(16),
-          splashColor: _accentColor.withAlpha(20),
-          highlightColor: _accentColor.withAlpha(10),
+          borderRadius: BorderRadius.circular(24),
+          splashColor: Colors.white12,
           child: Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ── Top row: title + time ──────────────────────────────────
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── Time block ─────────────────────────────────────────
+                    // Icon badge
                     Container(
-                      width: 52,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 6),
+                      width: 40,
+                      height: 40,
                       decoration: BoxDecoration(
-                        color: _accentColor.withAlpha(15),
-                        borderRadius: BorderRadius.circular(10),
+                        color: isFeatured
+                            ? Colors.white12
+                            : AppColors.cardSecondary,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text(
-                            timeFmt.format(schedule.startTime),
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w800,
-                              color: _accentColor,
-                              height: 1.1,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          Container(
-                            height: 1,
-                            color: _accentColor.withAlpha(60),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            timeFmt.format(schedule.endTime),
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                              color: _accentColor.withAlpha(180),
-                              height: 1.1,
-                            ),
-                          ),
-                        ],
+                      child: Icon(
+                        schedule.isWork
+                            ? Icons.work_outline_rounded
+                            : Icons.event_rounded,
+                        size: 20,
+                        color: isFeatured
+                            ? Colors.white70
+                            : AppColors.textSecondary,
                       ),
                     ),
-
                     const SizedBox(width: 12),
 
-                    // ── Title + location ───────────────────────────────────
+                    // Title + location
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
                             schedule.title,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
-                              height: 1.3,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: titleColor,
+                              height: 1.2,
                             ),
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
                           ),
                           if (schedule.location.isNotEmpty) ...[
-                            const SizedBox(height: 5),
+                            const SizedBox(height: 4),
                             Row(
                               children: [
-                                Icon(
-                                  Icons.location_on_rounded,
-                                  size: 13,
-                                  color: AppColors.textSecondary.withAlpha(180),
-                                ),
+                                Icon(Icons.location_on_rounded,
+                                    size: 12, color: subColor),
                                 const SizedBox(width: 3),
                                 Expanded(
                                   child: Text(
                                     schedule.location,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: AppColors.textSecondary,
-                                      fontWeight: FontWeight.w500,
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: subColor,
+                                      fontWeight: FontWeight.w400,
                                     ),
                                     maxLines: 1,
                                     overflow: TextOverflow.ellipsis,
@@ -145,52 +219,69 @@ class ScheduleCard extends StatelessWidget {
                       ),
                     ),
 
-                    // ── Type indicator dot ─────────────────────────────────
-                    const SizedBox(width: 8),
-                    Container(
-                      width: 8,
-                      height: 8,
-                      margin: const EdgeInsets.only(top: 4),
-                      decoration: BoxDecoration(
-                        color: _accentColor,
-                        shape: BoxShape.circle,
+                    // Arrow button (featured) or plain time
+                    if (isFeatured) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: const BoxDecoration(
+                          color: Colors.white,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 15,
+                          color: AppColors.cardDark,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+
+                const SizedBox(height: 14),
+
+                // ── Time row ──────────────────────────────────────────────
+                Row(
+                  children: [
+                    Icon(Icons.access_time_rounded,
+                        size: 13, color: subColor),
+                    const SizedBox(width: 5),
+                    Text(
+                      '${timeFmt.format(schedule.startTime)} – ${timeFmt.format(schedule.endTime)}',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                        color: subColor,
                       ),
                     ),
                   ],
                 ),
 
-                // ── Badges ────────────────────────────────────────────────
+                // ── Badges ─────────────────────────────────────────────────
                 if (schedule.isWork || schedule.needsTravel) ...[
-                  const SizedBox(height: 10),
-                  const Divider(height: 1),
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
                     children: [
-                      if (schedule.isWork)
-                        _Badge(
-                          label: 'Công việc',
-                          icon: Icons.work_outline_rounded,
-                          color: AppColors.primary,
-                        ),
                       if (schedule.needsTravel && schedule.travelMode == 'flight')
-                        _Badge(
+                        _Pill(
                           label: 'Cần bay',
                           icon: Icons.flight_takeoff_rounded,
-                          color: AppColors.info,
+                          dark: isFeatured,
                         ),
                       if (schedule.needsTravel && schedule.travelMode == 'car')
-                        _Badge(
+                        _Pill(
                           label: 'Di chuyển',
                           icon: Icons.directions_car_rounded,
-                          color: Colors.teal.shade700,
+                          dark: isFeatured,
                         ),
                       if (schedule.travelMinutes != null)
-                        _Badge(
+                        _Pill(
                           label: '${schedule.travelMinutes} phút',
-                          icon: Icons.access_time_rounded,
-                          color: AppColors.textSecondary,
+                          icon: Icons.timer_outlined,
+                          dark: isFeatured,
                         ),
                     ],
                   ),
@@ -198,19 +289,38 @@ class ScheduleCard extends StatelessWidget {
 
                 // ── Flight search button ───────────────────────────────────
                 if (schedule.needsTravel && schedule.travelMode == 'flight') ...[
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => _openFlightSearch(context),
-                      icon: const Icon(Icons.flight_rounded, size: 15),
-                      label: const Text('Xem chuyến bay'),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppColors.info,
-                        side: BorderSide(
-                            color: AppColors.info.withAlpha(120), width: 1.5),
-                        backgroundColor: AppColors.info.withAlpha(10),
-                        padding: const EdgeInsets.symmetric(vertical: 9),
+                  const SizedBox(height: 12),
+                  GestureDetector(
+                    onTap: onFlightSearch,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: isFeatured
+                            ? Colors.white12
+                            : AppColors.cardSecondary,
+                        borderRadius: BorderRadius.circular(50),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.flight_rounded,
+                              size: 14,
+                              color: isFeatured
+                                  ? Colors.white70
+                                  : AppColors.textSecondary),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Xem chuyến bay',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: isFeatured
+                                  ? Colors.white
+                                  : AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -224,34 +334,35 @@ class ScheduleCard extends StatelessWidget {
   }
 }
 
-class _Badge extends StatelessWidget {
+/// Small pill badge used inside cards
+class _Pill extends StatelessWidget {
   final String label;
   final IconData icon;
-  final Color color;
+  final bool dark;
 
-  const _Badge({required this.label, required this.icon, required this.color});
+  const _Pill({required this.label, required this.icon, required this.dark});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: color.withAlpha(18),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: color.withAlpha(60)),
+        color: dark ? Colors.white12 : AppColors.cardSecondary,
+        borderRadius: BorderRadius.circular(50),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 11, color: color),
-          const SizedBox(width: 4),
+          Icon(icon,
+              size: 11,
+              color: dark ? Colors.white60 : AppColors.textSecondary),
+          const SizedBox(width: 5),
           Text(
             label,
             style: TextStyle(
               fontSize: 11,
-              color: color,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.1,
+              fontWeight: FontWeight.w600,
+              color: dark ? Colors.white70 : AppColors.textSecondary,
             ),
           ),
         ],

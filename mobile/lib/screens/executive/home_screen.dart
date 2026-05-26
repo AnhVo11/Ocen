@@ -2,16 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../models/schedule.dart';
-import '../../models/user_role.dart';
 import '../../services/api_service.dart';
 import '../../theme.dart';
-import '../../widgets/app_drawer.dart';
 import '../../widgets/schedule_card.dart';
-import '../../widgets/travel_gap_card.dart';
 import '../../widgets/voice_input_sheet.dart';
+import '../../widgets/week_strip.dart';
 
-/// Schedule view for the executive.
-/// Shows today's events in Tab 1 and upcoming week in Tab 2.
 class ExecutiveHomeScreen extends StatefulWidget {
   const ExecutiveHomeScreen({super.key});
 
@@ -19,21 +15,18 @@ class ExecutiveHomeScreen extends StatefulWidget {
   State<ExecutiveHomeScreen> createState() => _ExecutiveHomeScreenState();
 }
 
-class _ExecutiveHomeScreenState extends State<ExecutiveHomeScreen>
-    with SingleTickerProviderStateMixin {
-  late final TabController _tabs;
+class _ExecutiveHomeScreenState extends State<ExecutiveHomeScreen> {
   final _api = ApiService();
+  DateTime _selectedDate = DateTime.now();
 
-  @override
-  void initState() {
-    super.initState();
-    _tabs = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabs.dispose();
-    super.dispose();
+  List<Schedule> get _schedulesForDay {
+    final all = _api.getUpcomingSchedules();
+    return all.where((s) {
+      return s.startTime.year == _selectedDate.year &&
+          s.startTime.month == _selectedDate.month &&
+          s.startTime.day == _selectedDate.day;
+    }).toList()
+      ..sort((a, b) => a.startTime.compareTo(b.startTime));
   }
 
   void _openVoiceInput() {
@@ -55,146 +48,270 @@ class _ExecutiveHomeScreenState extends State<ExecutiveHomeScreen>
 
   @override
   Widget build(BuildContext context) {
-    final List<Schedule> todaySchedules = _api.getTodaySchedules();
-    final List<Schedule> allSchedules = _api.getUpcomingSchedules();
+    final schedules = _schedulesForDay;
+    final isToday = _isSameDay(_selectedDate, DateTime.now());
+    final dateLabel = isToday
+        ? 'Hôm nay'
+        : DateFormat('EEE, dd/MM').format(_selectedDate);
 
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
+      backgroundColor: AppColors.background,
+      body: SafeArea(
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Lịch của tôi', // My schedule
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            // ── Header ────────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          dateLabel,
+                          style: const TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${schedules.length} sự kiện',
+                          style: const TextStyle(
+                            fontSize: 14,
+                            color: AppColors.textSecondary,
+                            fontWeight: FontWeight.w400,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Back button (drawer replacement)
+                  _IconBtn(
+                    icon: Icons.menu_rounded,
+                    onTap: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
             ),
-            Text(
-              DateFormat('dd/MM/yyyy').format(DateTime.now()),
-              style: const TextStyle(fontSize: 12, color: Colors.white70),
-            ),
-          ],
-        ),
-        bottom: TabBar(
-          controller: _tabs,
-          tabs: const [
-            Tab(text: 'Hôm nay'), // Today
-            Tab(text: 'Tuần này'), // This week
-          ],
-        ),
-      ),
-      drawer: const AppDrawer(role: UserRole.executive),
-      floatingActionButton: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.end,
-        children: [
-          FloatingActionButton.extended(
-            heroTag: 'exec_voice',
-            onPressed: _openVoiceInput,
-            icon: const Icon(Icons.mic_rounded, size: 20),
-            label: const Text('Giọng nói',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-          ),
-          const SizedBox(height: 10),
-          FloatingActionButton.extended(
-            heroTag: 'exec_form',
-            onPressed: _goToAddSchedule,
-            icon: const Icon(Icons.add_rounded, size: 20),
-            label: const Text('Thêm lịch',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 13)),
-          ),
-        ],
-      ),
-      body: TabBarView(
-        controller: _tabs,
-        children: [
-          // ── Today ──────────────────────────────────────────────────────
-          _ScheduleList(
-            schedules: todaySchedules,
-            emptyMessage: 'Hôm nay không có lịch nào.', // No events today
-            groupByDate: false,
-          ),
 
-          // ── This week ──────────────────────────────────────────────────
-          _ScheduleList(
-            schedules: allSchedules,
-            emptyMessage: 'Không có lịch sắp tới.', // No upcoming events
-            groupByDate: true,
-          ),
-        ],
+            // ── Week strip ────────────────────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
+              child: WeekStrip(
+                selectedDate: _selectedDate,
+                onDaySelected: (d) => setState(() => _selectedDate = d),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // ── Timeline ──────────────────────────────────────────────────
+            Expanded(
+              child: schedules.isEmpty
+                  ? _EmptyState(date: _selectedDate)
+                  : ListView.builder(
+                      padding: const EdgeInsets.only(top: 8, bottom: 120),
+                      itemCount: schedules.length,
+                      itemBuilder: (context, i) {
+                        final s = schedules[i];
+                        // Make the first work event featured (dark card)
+                        final isFeatured = s.isWork &&
+                            schedules.indexWhere((e) => e.isWork) == i;
+                        return ScheduleCard(
+                          schedule: s,
+                          isFirst: i == 0,
+                          isLast: i == schedules.length - 1,
+                          isFeatured: isFeatured,
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+
+      // ── Floating bottom nav ───────────────────────────────────────────────
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+      floatingActionButton: _BottomNavBar(
+        onVoice: _openVoiceInput,
+        onAdd: _goToAddSchedule,
+        onBack: () => Navigator.pop(context),
       ),
     );
   }
+
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
 // ---------------------------------------------------------------------------
-// Reusable schedule list with optional date-group headers
+// Floating bottom nav bar
 // ---------------------------------------------------------------------------
 
-class _ScheduleList extends StatelessWidget {
-  final List<Schedule> schedules;
-  final String emptyMessage;
-  final bool groupByDate;
+class _BottomNavBar extends StatelessWidget {
+  final VoidCallback onVoice;
+  final VoidCallback onAdd;
+  final VoidCallback onBack;
 
-  const _ScheduleList({
-    required this.schedules,
-    required this.emptyMessage,
-    required this.groupByDate,
+  const _BottomNavBar({
+    required this.onVoice,
+    required this.onAdd,
+    required this.onBack,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (schedules.isEmpty) {
-      return _EmptyState(message: emptyMessage);
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      itemCount: schedules.length,
-      itemBuilder: (context, i) {
-        final schedule = schedules[i];
-        final prev = i > 0 ? schedules[i - 1] : null;
-        final showHeader = groupByDate &&
-            (i == 0 || !_sameDay(schedules[i - 1].startTime, schedule.startTime));
-
-        // Show travel gap when two consecutive same-day events both have locations
-        // and there's at least a 5-minute window between them.
-        final showTravelGap = prev != null &&
-            !showHeader &&
-            prev.location.isNotEmpty &&
-            schedule.location.isNotEmpty &&
-            schedule.startTime.difference(prev.endTime).inMinutes >= 5;
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (showHeader)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-                child: Text(
-                  DateFormat('EEE, dd/MM').format(schedule.startTime),
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.primary,
-                    fontSize: 13,
-                  ),
-                ),
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withAlpha(15),
+            blurRadius: 16,
+            offset: const Offset(0, -2),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: [
+          _NavItem(
+            icon: Icons.home_rounded,
+            label: 'Trang chủ',
+            active: true,
+            onTap: () {},
+          ),
+          _NavItem(
+            icon: Icons.mic_rounded,
+            label: 'Giọng nói',
+            onTap: onVoice,
+          ),
+          // Centre FAB
+          GestureDetector(
+            onTap: onAdd,
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: const BoxDecoration(
+                color: AppColors.cardDark,
+                shape: BoxShape.circle,
               ),
-            if (showTravelGap)
-              TravelGapCard(prev: prev!, next: schedule),
-            ScheduleCard(schedule: schedule),
-          ],
-        );
-      },
+              child: const Icon(
+                Icons.add_rounded,
+                color: Colors.white,
+                size: 26,
+              ),
+            ),
+          ),
+          _NavItem(
+            icon: Icons.flight_rounded,
+            label: 'Chuyến bay',
+            onTap: () {},
+          ),
+          _NavItem(
+            icon: Icons.person_outline_rounded,
+            label: 'Vai trò',
+            onTap: onBack,
+          ),
+        ],
+      ),
     );
   }
-
-  bool _sameDay(DateTime a, DateTime b) =>
-      a.year == b.year && a.month == b.month && a.day == b.day;
 }
 
-class _EmptyState extends StatelessWidget {
-  final String message;
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool active;
+  final VoidCallback onTap;
 
-  const _EmptyState({required this.message});
+  const _NavItem({
+    required this.icon,
+    required this.label,
+    required this.onTap,
+    this.active = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            icon,
+            size: 22,
+            color: active ? AppColors.textPrimary : AppColors.textSecondary,
+          ),
+          const SizedBox(height: 2),
+          if (active)
+            Container(
+              width: 4,
+              height: 4,
+              decoration: const BoxDecoration(
+                color: AppColors.cardDark,
+                shape: BoxShape.circle,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Small icon button
+// ---------------------------------------------------------------------------
+
+class _IconBtn extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+
+  const _IconBtn({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: AppColors.cardLight,
+          borderRadius: BorderRadius.circular(14),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withAlpha(10),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Icon(icon, size: 20, color: AppColors.textPrimary),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Empty state
+// ---------------------------------------------------------------------------
+
+class _EmptyState extends StatelessWidget {
+  final DateTime date;
+
+  const _EmptyState({required this.date});
 
   @override
   Widget build(BuildContext context) {
@@ -202,17 +319,34 @@ class _EmptyState extends StatelessWidget {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(
-            Icons.event_available_outlined,
-            size: 72,
-            color: AppColors.textSecondary,
+          Container(
+            width: 72,
+            height: 72,
+            decoration: BoxDecoration(
+              color: AppColors.cardSecondary,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: const Icon(
+              Icons.event_available_rounded,
+              size: 36,
+              color: AppColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 16),
-          Text(
-            message,
-            style: const TextStyle(
+          const Text(
+            'Không có lịch',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          const Text(
+            'Ngày này chưa có sự kiện nào.',
+            style: TextStyle(
+              fontSize: 13,
               color: AppColors.textSecondary,
-              fontSize: 16,
             ),
           ),
         ],
